@@ -181,7 +181,8 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 	case "system-workspace":
 		addLabels[admissionWebhookLabelsKey] = "default"
 	default:
-		addLabels[admissionWebhookLabelsKey] = whsvr.vpcprefix + workspace
+		labelValue := []string{whsvr.vpcprefix, workspace}
+		addLabels[admissionWebhookLabelsKey] = strings.Join(labelValue, "-")
 	}
 
 	patchBytes, err := createPatch(objectMeta.Labels, addLabels)
@@ -247,7 +248,6 @@ func (whsvr *WebhookServer) serve(w http.ResponseWriter, r *http.Request) {
 	var admissionResponse *v1.AdmissionResponse
 	ar := v1.AdmissionReview{}
 	if _, _, err := deserializer.Decode(body, nil, &ar); err != nil {
-		fmt.Println("heh")
 		glog.Errorf("Can't decode body: %v", err)
 		admissionResponse = &v1.AdmissionResponse{
 			Result: &metav1.Status{
