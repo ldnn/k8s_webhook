@@ -166,7 +166,7 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 	var workspace string
 
 	if _, ok := objectMeta.Labels[admissionWebhookWorkspaceKey]; !ok {
-		msg := "Invalid namespace: not in workspace"
+		msg := fmt.Sprintf("Invalid namespace: %v not in workspace", objectMeta.Name)
 		glog.Errorf(msg)
 		return &v1.AdmissionResponse{
 			Result: &metav1.Status{
