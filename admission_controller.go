@@ -81,7 +81,7 @@ func admissionRequired(admissionWebhookAnnotationMutateKey string, metadata *met
 	return required
 }
 
-func mutationRequired(metadata *metav1.ObjectMeta) bool {
+func mutationRequired(metadata *metav1.ObjectMeta, targetLabel string) bool {
 	required := admissionRequired(admissionWebhookAnnotationMutateKey, metadata)
 
 	labels := metadata.GetLabels()
@@ -90,7 +90,10 @@ func mutationRequired(metadata *metav1.ObjectMeta) bool {
 	}
 
 	if _, ok := labels[admissionWebhookLabelsKey]; ok {
-		required = false
+		if metadata.Labels[admissionWebhookLabelsKey] == targetLabel {
+			required = false
+		}
+
 	}
 
 	glog.Infof("Mutation policy for %v: required:%v", metadata.Name, required)
@@ -106,6 +109,7 @@ func updateLabels(target map[string]string, added map[string]string) (patch []pa
 	for key, value := range added {
 		values[key] = value
 	}
+
 	patch = append(patch, patchOperation{
 		Op:    "add",
 		Path:  "/metadata/labels",
@@ -154,19 +158,12 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 		}
 	}
 
-	if !mutationRequired(objectMeta) {
-		glog.Infof("Skipping validation for %s due to policy check", resourceName)
-		return &v1.AdmissionResponse{
-			Allowed: true,
-		}
-	}
-
 	addLabels := make(map[string]string)
 
 	var workspace string
 
 	if _, ok := objectMeta.Labels[admissionWebhookWorkspaceKey]; !ok {
-		msg := fmt.Sprintf("Invalid namespace: %v not in workspace", objectMeta.Name)
+		msg := fmt.Sprintf("Invalid namespace: \"%v\" not in workspace", objectMeta.Name)
 		glog.Errorf(msg)
 		return &v1.AdmissionResponse{
 			Result: &metav1.Status{
@@ -183,6 +180,13 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 	default:
 		labelValue := []string{whsvr.vpcprefix, workspace}
 		addLabels[admissionWebhookLabelsKey] = strings.Join(labelValue, "-")
+	}
+
+	if !mutationRequired(objectMeta, addLabels[admissionWebhookLabelsKey]) {
+		glog.Infof("Skipping validation for %s due to policy check", resourceName)
+		return &v1.AdmissionResponse{
+			Allowed: true,
+		}
 	}
 
 	patchBytes, err := createPatch(objectMeta.Labels, addLabels)
@@ -255,7 +259,7 @@ func (whsvr *WebhookServer) serve(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 	} else {
-		fmt.Println(r.URL.Path)
+		//fmt.Println(r.URL.Path)
 		if r.URL.Path == "/mutate" {
 			admissionResponse = whsvr.mutate(&ar)
 		}
