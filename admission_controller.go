@@ -77,26 +77,26 @@ func admissionRequired(admissionWebhookAnnotationMutateKey string, metadata *met
 	} else {
 		required = true
 	}
-
+	glog.Infof("Mutation policy for %v: required:%v", metadata.Name, required)
 	return required
 }
 
-func mutationRequired(metadata *metav1.ObjectMeta, targetLabel string) bool {
-	required := admissionRequired(admissionWebhookAnnotationMutateKey, metadata)
+func modifyRequired(metadata *metav1.ObjectMeta, targetLabel string) bool {
 
+	required := true
 	labels := metadata.GetLabels()
 	if labels == nil {
 		labels = map[string]string{}
 	}
 
 	if _, ok := labels[admissionWebhookLabelsKey]; ok {
-		if metadata.Labels[admissionWebhookLabelsKey] == targetLabel {
+		if labels[admissionWebhookLabelsKey] == targetLabel {
 			required = false
 		}
 
 	}
 
-	glog.Infof("Mutation policy for %v: required:%v", metadata.Name, required)
+	glog.Infof("The label %v exists in this namespace: %v", targetLabel, metadata.Name)
 	return required
 }
 
@@ -158,6 +158,13 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 		}
 	}
 
+	if !admissionRequired(admissionWebhookAnnotationMutateKey, objectMeta) {
+		glog.Infof("Skipping validation for %s due to policy check", resourceName)
+		return &v1.AdmissionResponse{
+			Allowed: true,
+		}
+	}
+
 	addLabels := make(map[string]string)
 
 	var workspace string
@@ -182,7 +189,7 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 		addLabels[admissionWebhookLabelsKey] = strings.Join(labelValue, "-")
 	}
 
-	if !mutationRequired(objectMeta, addLabels[admissionWebhookLabelsKey]) {
+	if !modifyRequired(objectMeta, addLabels[admissionWebhookLabelsKey]) {
 		glog.Infof("Skipping validation for %s due to policy check", resourceName)
 		return &v1.AdmissionResponse{
 			Allowed: true,
