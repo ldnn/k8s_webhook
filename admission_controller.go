@@ -31,18 +31,32 @@ const (
 	admissionWebhookWorkspaceKey        = "kubesphere.io/workspace"
 )
 
+type sliceFlag []string
+
+func (f *sliceFlag) String() string {
+	return fmt.Sprintf("%v", []string(*f))
+}
+
+func (f *sliceFlag) Set(value string) error {
+	split := strings.Split(value, ",")
+	*f = split
+	return nil
+}
+
 type WebhookServer struct {
-	server    *http.Server
-	vpcprefix string
+	server     *http.Server
+	vpcprefix  string
+	abnormalws sliceFlag
 }
 
 // Webhook Server parameters
 type WhSvrParameters struct {
-	port           int    // webhook server port
-	certFile       string // path to the x509 certificate for https
-	keyFile        string // path to the x509 private key matching `CertFile`
-	sidecarCfgFile string // path to sidecar injector configuration file
-	vpcprefix      string // vpc label key prefix
+	port           int       // webhook server port
+	certFile       string    // path to the x509 certificate for https
+	keyFile        string    // path to the x509 private key matching `CertFile`
+	sidecarCfgFile string    // path to sidecar injector configuration file
+	vpcprefix      string    // vpc label key prefix
+	workspaces     sliceFlag // abnormal workspaces
 }
 
 type patchOperation struct {
@@ -181,12 +195,22 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 		workspace = objectMeta.Labels[admissionWebhookWorkspaceKey]
 	}
 
-	switch workspace {
-	case "system-workspace":
-		addLabels[admissionWebhookLabelsKey] = "default"
-	default:
-		labelValue := []string{whsvr.vpcprefix, workspace}
-		addLabels[admissionWebhookLabelsKey] = strings.Join(labelValue, "-")
+	ws := make(map[string]bool)
+
+	for _, v := range whsvr.abnormalws {
+		ws[v] = true
+	}
+
+	if ws[workspace] {
+		addLabels[admissionWebhookLabelsKey] = workspace
+	} else {
+		switch workspace {
+		case "system-workspace":
+			addLabels[admissionWebhookLabelsKey] = "default"
+		default:
+			labelValue := []string{whsvr.vpcprefix, workspace}
+			addLabels[admissionWebhookLabelsKey] = strings.Join(labelValue, "-")
+		}
 	}
 
 	if !modifyRequired(objectMeta, addLabels[admissionWebhookLabelsKey]) {
