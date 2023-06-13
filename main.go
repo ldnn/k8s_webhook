@@ -21,6 +21,7 @@ func main() {
 	flag.StringVar(&parameters.certFile, "tlsCertFile", "/etc/webhook/certs/cert.crt", "File containing the x509 Certificate for HTTPS.")
 	flag.StringVar(&parameters.keyFile, "tlsKeyFile", "/etc/webhook/certs/key.key", "File containing the x509 private key to --tlsCertFile.")
 	flag.StringVar(&parameters.vpcprefix, "vpcprefix", "k8s-xpq-tyy-csapp", "vpcprefix")
+	flag.Var(&parameters.workspaces, "ws", "abnormal workspaces,for example:shanlv,tuangou")
 	flag.Parse()
 
 	if parameters.vpcprefix == " " {
@@ -37,7 +38,8 @@ func main() {
 			Addr:      fmt.Sprintf(":%v", parameters.port),
 			TLSConfig: &tls.Config{Certificates: []tls.Certificate{pair}},
 		},
-		vpcprefix: parameters.vpcprefix,
+		vpcprefix:  parameters.vpcprefix,
+		abnormalws: parameters.workspaces,
 	}
 
 	// define http server and server handler
