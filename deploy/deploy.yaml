@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: kube-system
+  name: ks-webhook-controller
+  labels:
+    app: ks-webhook-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ks-webhook-controller
+  template:
+    metadata:
+      labels:
+        app: ks-webhook-controller
+    spec:
+      serviceAccountName: ks-webhook-controller-sa
+      serviceAccount: ks-webhook-controller-sa
+      containers:
+        - name: ks-webhook-controller
+          image: repos.cloud.cmft/wu/ks-webhook-controller:v1.7
+          imagePullPolicy: IfNotPresent
+          args:
+            - -tlsCertFile=/etc/webhook/certs/cert.crt
+            - -tlsKeyFile=/etc/webhook/certs/key.key
+            - -alsologtostderr
+            - -vpcprefix=k8s-xpq-csy-poc
+            - -ws=shanglv,tuangou
+            - -v=4
+            - 2>&1
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /etc/webhook/certs
+              readOnly: true
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: ks-webhook-certs

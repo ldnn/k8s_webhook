@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lyl
+  labels:
+    kubesphere.io/workspace: system-workspace
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lyx
+  labels:
+    nci.yunshan.net/vpc: k8s-xpq-tyy-csapp-wzy-test-ys1000
+    kubesphere.io/workspace: system-workspace
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: xyx
+  annotations:
+    admission-webhook-ks.cmft/mutate: "n"
+  labels:
+    kubesphere.io/workspace: system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lyh
+  labels:
+    kubesphere.io/workspace: devops
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lyc
+  labels:
+    kubesphere.io/workspace: shanglv

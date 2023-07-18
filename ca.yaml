@@ -1,0 +1,34 @@
+#创建自签的clusterissuer
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+#生成证书
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-selfsigned-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: my-selfsigned-ca
+  secretName: root-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+#生成以这个证书做为CA的clusterissuer，其他证书由这个CA签发
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: my-ca-issuer
+spec:
+  ca:
+    secretName: root-secret
