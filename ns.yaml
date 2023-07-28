@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: lyl
   labels:
-    kubesphere.io/workspace: bigdata-usercenter2
+    kubesphere.io/workspace: system-workspace

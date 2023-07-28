@@ -17,5 +17,9 @@ webhooks:
         apiGroups: ["","apps"]
         apiVersions: ["v1"]
         resources: ["namespaces","deployments"]
+      - operations: [ "CREATE","UPDATE","DELETE" ]
+        apiGroups: ["tenant.kubesphere.io"]
+        apiVersions: ["v1alpha1"]
+        resources: ["workspaces"]
     sideEffects: None
     admissionReviewVersions: ["v1", "v1beta1"]

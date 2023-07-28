@@ -1,0 +1,9 @@
+apiVersion: tenant.kubesphere.io/v1alpha1
+kind: Workspace
+metadata:
+  labels:
+    kubefed.io/managed: "true"
+  name: leo-test
+spec:
+  manager: admin
+

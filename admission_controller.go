@@ -119,30 +119,7 @@ func mutateNamespce(svmate serverMate, namespace *corev1.Namespace) *v1.Admissio
 		workspace = objectMeta.Labels[admissionWebhookWorkspaceKey]
 	}
 
-	ws := make(map[string]bool)
-
-	for _, v := range svmate.abnormalws {
-		ws[v] = true
-	}
-
-	if ws[workspace] {
-		switch workspace {
-		case "midcloud":
-			addLabels[admissionWebhookLabelsKey] = "db-middleware"
-		case "bigdata-usercenter2":
-			addLabels[admissionWebhookLabelsKey] = "bigdata-jh-ks"
-		default:
-			addLabels[admissionWebhookLabelsKey] = workspace
-		}
-	} else {
-		switch workspace {
-		case "system-workspace":
-			addLabels[admissionWebhookLabelsKey] = "default"
-		default:
-			labelValue := []string{svmate.vpcprefix, workspace}
-			addLabels[admissionWebhookLabelsKey] = strings.Join(labelValue, "-")
-		}
-	}
+	addLabels[admissionWebhookLabelsKey] = generateVpcName(workspace, svmate)
 
 	if !checkLabel(objectMeta, addLabels[admissionWebhookLabelsKey]) {
 		glog.Infof("Skipping validation for %s due to policy check", resourceName)
@@ -220,6 +197,37 @@ func checkLabel(metadata *metav1.ObjectMeta, targetLabel string) bool {
 	return required
 }
 
+func generateVpcName(workspace string, svmate serverMate) string {
+	ws := make(map[string]bool)
+	var vpcName string
+
+	for _, v := range svmate.abnormalws {
+		ws[v] = true
+	}
+
+	if ws[workspace] {
+		switch workspace {
+		case "midcloud":
+			vpcName = "db-middleware"
+		case "bigdata-usercenter2":
+			vpcName = "bigdata-jh-ks"
+		case "ALL":
+			vpcName = "default"
+		default:
+			vpcName = workspace
+		}
+	} else {
+		switch workspace {
+		case "system-workspace":
+			vpcName = "default"
+		default:
+			labelValue := []string{svmate.vpcprefix, workspace}
+			vpcName = strings.Join(labelValue, "-")
+		}
+	}
+	return vpcName
+}
+
 func checkAnnotation(meta *metav1.ObjectMeta, targetAnnotation map[string]string) bool {
 
 	required := true
@@ -290,10 +298,9 @@ func createPatch(availableKeys map[string]string, values map[string]string) ([]b
 func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse {
 	req := ar.Request
 	var svmate serverMate
-	svmate.vpcprefix, svmate.abnormalws = whsvr.vpcprefix, whsvr.abnormalws
-	glog.Infof("AdmissionReview for Kind=%v, Name=%v (%v) UID=%v patchOperation=%v UserInfo=%v",
+	svmate.vpcprefix, svmate.abnormalws, svmate.op = whsvr.vpcprefix, whsvr.abnormalws, req.Operation
+	glog.Infof("AdmissionReview for Kind=%v, Name=%v UID=%v patchOperation=%v UserInfo=%v",
 		req.Kind, req.Name, req.UID, req.Operation, req.UserInfo)
-
 	switch req.Kind.Kind {
 	case "Namespace":
 		var namespace corev1.Namespace
@@ -306,6 +313,7 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 				},
 			}
 		}
+		glog.Infof("start mutateNamespce")
 		return mutateNamespce(svmate, &namespace)
 	case "Deployment":
 		var deployment appsv1.Deployment
@@ -317,7 +325,11 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 				},
 			}
 		}
+		glog.Infof("start mutateDeploy")
 		return mutateDeploy(&deployment)
+	case "Workspace":
+		glog.Infof("start vpcHandler")
+		return vpcHandler(req.Name, svmate)
 	default:
 		msg := fmt.Sprintf("\nNot support for this Kind of resource  %v", req.Kind.Kind)
 		glog.Infof(msg)
@@ -333,6 +345,12 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 // Serve method for webhook server
 func (whsvr *WebhookServer) serve(w http.ResponseWriter, r *http.Request) {
 	var body []byte
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	if r.Body != nil {
 		if data, err := ioutil.ReadAll(r.Body); err == nil {
 			body = data
@@ -380,7 +398,6 @@ func (whsvr *WebhookServer) serve(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 	} else {
-		//fmt.Println(r.URL.Path)
 		if r.URL.Path == "/mutate" {
 			admissionResponse = whsvr.mutate(&ar)
 		}

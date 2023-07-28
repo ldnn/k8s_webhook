@@ -10,7 +10,8 @@
             "request": "attach",
             "mode": "remote",
             "port": 6443,
-            "host": "127.0.0.1"
+            "host": "127.0.0.1",
+            "console": "integratedTerminal"
         }
     ]
 }

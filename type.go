@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"strings"
 
+	v1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/dynamic"
 )
 
 var (
@@ -53,6 +55,7 @@ type patchOperation struct {
 type serverMate struct {
 	vpcprefix  string
 	abnormalws sliceFlag
+	op         v1.Operation
 }
 
 type Nets struct {
@@ -81,6 +84,15 @@ type SubnetStatus struct {
 	Valid           bool   `json:"valid"`
 }
 
+type Vpc struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
+}
+
+type Request struct {
+	Operation string `json:"operation"`
+}
+
 func (f *sliceFlag) String() string {
 	return fmt.Sprintf("%v", []string(*f))
 }
@@ -89,4 +101,8 @@ func (f *sliceFlag) Set(value string) error {
 	split := strings.Split(value, ",")
 	*f = split
 	return nil
+}
+
+type Client struct {
+	dynamicClient *dynamic.DynamicClient
 }
