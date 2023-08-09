@@ -18,7 +18,7 @@ func getSubnet(namespace string) string {
 	var cidr string
 
 	// 加载配置文件，生成 config 对象
-	config, err := clientcmd.BuildConfigFromFlags("", "")
+	config, err := clientcmd.BuildConfigFromFlags("", "/root/.kube/config")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -60,6 +60,7 @@ func getSubnet(namespace string) string {
 
 }
 
+// 生成描述键值对
 func createAnnotation(net string) map[string]string {
 	ip := []string{}
 	ips := make(map[string]string)

@@ -20,12 +20,12 @@ func main() {
 	flag.IntVar(&parameters.port, "port", 443, "Webhook server port.")
 	flag.StringVar(&parameters.certFile, "tlsCertFile", "/etc/webhook/certs/cert.crt", "File containing the x509 Certificate for HTTPS.")
 	flag.StringVar(&parameters.keyFile, "tlsKeyFile", "/etc/webhook/certs/key.key", "File containing the x509 private key to --tlsCertFile.")
-	flag.StringVar(&parameters.vpcprefix, "vpcprefix", "k8s-xpq-tyy-csapp", "vpcprefix")
+	flag.StringVar(&parameters.vpcprefix, "vpcprefix", "default", "vpcprefix")
 	flag.Var(&parameters.workspaces, "ws", "abnormal workspaces,for example:shanlv,tuangou")
 	flag.Parse()
 
 	if parameters.vpcprefix == " " {
-		glog.Errorf("The 'vpcprefix' option must be specified!!!")
+		glog.Errorf("'vpcprefix'选项不支持空串!!!")
 	}
 
 	pair, err := tls.LoadX509KeyPair(parameters.certFile, parameters.keyFile)

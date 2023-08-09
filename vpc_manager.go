@@ -19,28 +19,37 @@ func vpcHandler(wsName string, svmate serverMate) *v1.AdmissionResponse {
 	//vpcName := "k8s-xpq-csy-poc-test"
 	// 加载配置文件，生成 config 对象
 
-	config, err := clientcmd.BuildConfigFromFlags("", "")
+	config, err := clientcmd.BuildConfigFromFlags("", "/root/.kube/config")
 	if err != nil {
 		panic(err.Error())
 	}
 
 	// 实例化 DynamicClient
 	var client Client
+	var vpcName string
 	client.dynamicClient, err = dynamic.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	vpcName := generateVpcName(wsName, svmate)
+	if svmate.vpcprefix == "default" {
+		return &v1.AdmissionResponse{
+			Allowed: true,
+		}
+	} else {
+		vpcName = generateVpcName(wsName, svmate)
+	}
 
 	switch svmate.op {
 	case "DELETE":
+		//workspace删除时同步删除vpc
 		if !client.chekVpc(vpcName) || client.delVpc(vpcName) {
 			return &v1.AdmissionResponse{
 				Allowed: true,
 			}
 		}
 	case "CREATE":
+		//workspace删除时同步删除vpc
 		if client.chekVpc(vpcName) || client.createVpc(vpcName) {
 			return &v1.AdmissionResponse{
 				Allowed: true,

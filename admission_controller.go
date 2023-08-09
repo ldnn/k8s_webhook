@@ -30,7 +30,7 @@ func mutateDeploy(deploy *appsv1.Deployment) *v1.AdmissionResponse {
 			Allowed: true,
 		}
 	}
-
+	//获取所在子网的前15个ip地址，生成annotation键值对
 	subnet := getSubnet(resourceNamespace)
 	ips := createAnnotation(subnet)
 
@@ -38,7 +38,7 @@ func mutateDeploy(deploy *appsv1.Deployment) *v1.AdmissionResponse {
 		ips := make(map[string]string)
 		ips["nci.yunshan.net/ips"] = "10.64.88.1,10.64.88.2,10.64.88.3,10.64.88.4,10.64.88.5,10.64.88.6,10.64.88.7,10.64.88.8,10.64.88.9,10.64.88.10,10.64.88.11,10.64.88.12,10.64.88.13,10.64.88.14,10.64.88.15"
 	*/
-
+	//通过标签判断是否为网关deployment
 	if _, ok := objectMeta.Labels["app.kubernetes.io/component"]; !ok {
 		glog.Infof("Skipping validation for %s due to policy check", resourceName)
 		return &v1.AdmissionResponse{
@@ -96,6 +96,7 @@ func mutateNamespce(svmate serverMate, namespace *corev1.Namespace) *v1.Admissio
 
 	resourceName, objectMeta = namespace.Name, &namespace.ObjectMeta
 
+	//判断是否进行修改
 	if !admissionRequired(admissionWebhookAnnotationMutateKey, objectMeta) {
 		glog.Infof("Skipping validation for %s due to policy check", resourceName)
 		return &v1.AdmissionResponse{
@@ -107,6 +108,7 @@ func mutateNamespce(svmate serverMate, namespace *corev1.Namespace) *v1.Admissio
 
 	var workspace string
 
+	//判断有没有workspace标签
 	if _, ok := objectMeta.Labels[admissionWebhookWorkspaceKey]; !ok {
 		msg := fmt.Sprintf("Invalid namespace: \"%v\" not in workspace", objectMeta.Name)
 		glog.Errorf(msg)
@@ -119,7 +121,12 @@ func mutateNamespce(svmate serverMate, namespace *corev1.Namespace) *v1.Admissio
 		workspace = objectMeta.Labels[admissionWebhookWorkspaceKey]
 	}
 
-	addLabels[admissionWebhookLabelsKey] = generateVpcName(workspace, svmate)
+	//生成vpc名
+	if svmate.vpcprefix == "default" {
+		addLabels[admissionWebhookLabelsKey] = "default"
+	} else {
+		addLabels[admissionWebhookLabelsKey] = generateVpcName(workspace, svmate)
+	}
 
 	if !checkLabel(objectMeta, addLabels[admissionWebhookLabelsKey]) {
 		glog.Infof("Skipping validation for %s due to policy check", resourceName)
@@ -164,6 +171,7 @@ func admissionRequired(admissionWebhookAnnotationMutateKey string, metadata *met
 
 	var required bool
 
+	//判断是否需要进行修改
 	if _, ok := annotations[admissionWebhookAnnotationMutateKey]; ok {
 		switch strings.ToLower(annotations[admissionWebhookAnnotationMutateKey]) {
 		default:
@@ -186,6 +194,7 @@ func checkLabel(metadata *metav1.ObjectMeta, targetLabel string) bool {
 		labels = map[string]string{}
 	}
 
+	//检查标签是否已经存在
 	if _, ok := labels[admissionWebhookLabelsKey]; ok {
 		if labels[admissionWebhookLabelsKey] == targetLabel {
 			required = false
@@ -205,14 +214,13 @@ func generateVpcName(workspace string, svmate serverMate) string {
 		ws[v] = true
 	}
 
+	//处理历史中的不规范vpc命名
 	if ws[workspace] {
 		switch workspace {
 		case "midcloud":
 			vpcName = "db-middleware"
 		case "bigdata-usercenter2":
 			vpcName = "bigdata-jh-ks"
-		case "ALL":
-			vpcName = "default"
 		default:
 			vpcName = workspace
 		}
@@ -225,6 +233,7 @@ func generateVpcName(workspace string, svmate serverMate) string {
 			vpcName = strings.Join(labelValue, "-")
 		}
 	}
+
 	return vpcName
 }
 
@@ -236,6 +245,7 @@ func checkAnnotation(meta *metav1.ObjectMeta, targetAnnotation map[string]string
 		annotations = map[string]string{}
 	}
 
+	//检查描述是否存在
 	if _, ok := annotations[admissionWebhookAnnotationsKey]; ok {
 		if annotations[admissionWebhookAnnotationsKey] == targetAnnotation[admissionWebhookAnnotationsKey] {
 			required = false
@@ -302,6 +312,19 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 	glog.Infof("AdmissionReview for Kind=%v, Name=%v UID=%v patchOperation=%v UserInfo=%v",
 		req.Kind, req.Name, req.UID, req.Operation, req.UserInfo)
 	switch req.Kind.Kind {
+	case "Pod":
+		var pod corev1.Pod
+
+		if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
+			glog.Errorf("Could not unmarshal raw object: %v", err)
+			return &v1.AdmissionResponse{
+				Result: &metav1.Status{
+					Message: err.Error(),
+				},
+			}
+		}
+		glog.Infof("start mutatePod")
+		return mutatePod(&pod)
 	case "Namespace":
 		var namespace corev1.Namespace
 
