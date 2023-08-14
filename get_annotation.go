@@ -18,7 +18,7 @@ func getSubnet(namespace string) string {
 	var cidr string
 
 	// 加载配置文件，生成 config 对象
-	config, err := clientcmd.BuildConfigFromFlags("", "/root/.kube/config")
+	config, err := clientcmd.BuildConfigFromFlags("", "")
 	if err != nil {
 		panic(err.Error())
 	}

@@ -56,6 +56,7 @@ type serverMate struct {
 	vpcprefix  string
 	abnormalws sliceFlag
 	op         v1.Operation
+	client     Client
 }
 
 type Nets struct {

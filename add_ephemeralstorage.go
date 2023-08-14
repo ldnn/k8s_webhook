@@ -1,66 +1,75 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 
 	"github.com/golang/glog"
-	"gomodules.xyz/jsonpatch/v2"
-	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func mutatePod(pod *corev1.Pod) *v1.AdmissionResponse {
-	patchesBytes, err := addEphemeralStorage(pod)
-
-	if err != nil {
-		return &v1.AdmissionResponse{
-			Result: &metav1.Status{
-				Message: err.Error(),
-			},
-		}
-	}
-
-	glog.Infof("AdmissionResponse: patch=%v\n", string(patchesBytes))
-
-	return &v1.AdmissionResponse{
-		Allowed: true,
-		Patch:   patchesBytes,
-		PatchType: func() *v1.PatchType {
-			pt := v1.PatchTypeJSONPatch
-			return &pt
-		}(),
-	}
-}
-
-func addEphemeralStorage(pod *corev1.Pod) ([]byte, error) {
+func addEphemeralStorage(containers []corev1.Container) []patchOperation {
 
 	ephemeralStorageMax := resource.MustParse("2Gi")
-	var patches []jsonpatch.JsonPatchOperation
+	var patches []patchOperation
 
-	for i := range pod.Spec.Containers {
+	for i := range containers {
 		// 判断容器的 ephemeral-storage 资源配置是否存在并小于2G
-		ephemeralStorage, ok := pod.Spec.Containers[i].Resources.Limits[corev1.ResourceEphemeralStorage]
+		ephemeralStorage, ok := containers[i].Resources.Limits[corev1.ResourceEphemeralStorage]
 		if ok {
 			if !ephemeralStorage.IsZero() && ephemeralStorage.Cmp(ephemeralStorageMax) <= 0 {
 				continue
 			}
 		}
 		// 修改容器的 ephemeral-storage 资源配置
-		patches = append(patches, jsonpatch.JsonPatchOperation{
-			Operation: "add",
-			Path:      fmt.Sprintf("/spec/containers/%d/resources/requests/%s", i, corev1.ResourceEphemeralStorage),
-			Value:     ephemeralStorageMax,
+		patches = append(patches, patchOperation{
+			Op:    "add",
+			Path:  fmt.Sprintf("/spec/template/spec/containers/%d/resources/requests/%s", i, corev1.ResourceEphemeralStorage),
+			Value: ephemeralStorageMax,
 		})
-		patches = append(patches, jsonpatch.JsonPatchOperation{
-			Operation: "add",
-			Path:      fmt.Sprintf("/spec/containers/%d/resources/limits/%s", i, corev1.ResourceEphemeralStorage),
-			Value:     ephemeralStorageMax,
+		patches = append(patches, patchOperation{
+			Op:    "add",
+			Path:  fmt.Sprintf("/spec/template/spec/containers/%d/resources/limits/%s", i, corev1.ResourceEphemeralStorage),
+			Value: ephemeralStorageMax,
 		})
 	}
+	return patches
+}
 
-	return json.Marshal(patches)
+func (c *Client) chekWorkspace(namespace string) bool {
 
+	// 设置要请求的 GVR
+	gvr := schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+
+	// 发送请求，并得到返回结果
+	unStructData, err := c.dynamicClient.Resource(gvr).Get(context.TODO(), namespace, metav1.GetOptions{})
+	if err != nil {
+		glog.Error(err.Error())
+		return false
+	}
+
+	var obj corev1.Namespace
+
+	// 使用 runtime.DefaultUnstructuredConverter 转换 item 为对象
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(unStructData.UnstructuredContent(), &obj)
+	if err != nil {
+		glog.Error(err.Error())
+		//return false
+
+	}
+
+	workspace, ok := obj.GetLabels()["kubesphere.io/workspace"]
+	if ok && workspace == "system-workspace" {
+		return true
+	}
+
+	return true
 }

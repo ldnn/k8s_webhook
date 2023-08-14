@@ -3,8 +3,7 @@ module webhook
 go 1.19
 
 require (
-	github.com/golang/glog v1.1.1
-	gomodules.xyz/jsonpatch/v2 v2.3.0
+	github.com/golang/glog v1.1.2
 	k8s.io/api v0.27.4
 	k8s.io/apimachinery v0.27.4
 	k8s.io/client-go v0.27.4

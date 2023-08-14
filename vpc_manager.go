@@ -10,27 +10,14 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 func vpcHandler(wsName string, svmate serverMate) *v1.AdmissionResponse {
 
 	//vpcName := "k8s-xpq-csy-poc-test"
-	// 加载配置文件，生成 config 对象
 
-	config, err := clientcmd.BuildConfigFromFlags("", "/root/.kube/config")
-	if err != nil {
-		panic(err.Error())
-	}
-
-	// 实例化 DynamicClient
-	var client Client
+	client := svmate.client
 	var vpcName string
-	client.dynamicClient, err = dynamic.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
-	}
 
 	if svmate.vpcprefix == "default" {
 		return &v1.AdmissionResponse{

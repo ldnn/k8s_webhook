@@ -15,59 +15,177 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
-func mutateDeploy(deploy *appsv1.Deployment) *v1.AdmissionResponse {
+func mutateSts(svmate serverMate, sts *appsv1.StatefulSet) *v1.AdmissionResponse {
 	var (
-		objectMeta, specMeta            *metav1.ObjectMeta
+		objectMeta                      *metav1.ObjectMeta
 		resourceName, resourceNamespace string
 	)
-	resourceName, resourceNamespace, objectMeta, specMeta = deploy.Name, deploy.Namespace, &deploy.ObjectMeta, &deploy.Spec.Template.ObjectMeta
+	resourceName, resourceNamespace, objectMeta = sts.Name, sts.Namespace, &sts.ObjectMeta
 
+	var patches []patchOperation
+
+	//判断是否需要修改
 	if !admissionRequired(admissionWebhookAnnotationMutateKey, objectMeta) {
 		glog.Infof("Skipping validation for %s due to policy check", resourceName)
 		return &v1.AdmissionResponse{
 			Allowed: true,
 		}
 	}
+
+	client := svmate.client
+
+	if client.chekWorkspace(resourceNamespace) {
+		patches = addEphemeralStorage(sts.Spec.Template.Spec.Containers)
+	}
+
+	patchBytes, err := json.Marshal(patches)
+	if err != nil {
+		return &v1.AdmissionResponse{
+			Result: &metav1.Status{
+				Message: err.Error(),
+			},
+		}
+	}
+
+	glog.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
+	return &v1.AdmissionResponse{
+		Allowed: true,
+		Patch:   patchBytes,
+		PatchType: func() *v1.PatchType {
+			pt := v1.PatchTypeJSONPatch
+			return &pt
+		}(),
+	}
+
+}
+
+func mutateDs(svmate serverMate, ds *appsv1.DaemonSet) *v1.AdmissionResponse {
+	var (
+		objectMeta                      *metav1.ObjectMeta
+		resourceName, resourceNamespace string
+	)
+	resourceName, resourceNamespace, objectMeta = ds.Name, ds.Namespace, &ds.ObjectMeta
+
+	var patches []patchOperation
+
+	//判断是否需要修改
+	if !admissionRequired(admissionWebhookAnnotationMutateKey, objectMeta) {
+		glog.Infof("Skipping validation for %s due to policy check", resourceName)
+		return &v1.AdmissionResponse{
+			Allowed: true,
+		}
+	}
+
+	client := svmate.client
+
+	if client.chekWorkspace(resourceNamespace) {
+		patches = addEphemeralStorage(ds.Spec.Template.Spec.Containers)
+	}
+
+	patchBytes, err := json.Marshal(patches)
+	if err != nil {
+		return &v1.AdmissionResponse{
+			Result: &metav1.Status{
+				Message: err.Error(),
+			},
+		}
+	}
+
+	glog.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
+	return &v1.AdmissionResponse{
+		Allowed: true,
+		Patch:   patchBytes,
+		PatchType: func() *v1.PatchType {
+			pt := v1.PatchTypeJSONPatch
+			return &pt
+		}(),
+	}
+}
+
+func mutateDeploy(svmate serverMate, deploy *appsv1.Deployment) *v1.AdmissionResponse {
+	var (
+		objectMeta, specMeta            *metav1.ObjectMeta
+		resourceName, resourceNamespace string
+	)
+	resourceName, resourceNamespace, objectMeta, specMeta = deploy.Name, deploy.Namespace, &deploy.ObjectMeta, &deploy.Spec.Template.ObjectMeta
+
+	var patches []patchOperation
+
+	//判断是否需要修改
+	if !admissionRequired(admissionWebhookAnnotationMutateKey, objectMeta) {
+		glog.Infof("Skipping validation for %s due to policy check", resourceName)
+		return &v1.AdmissionResponse{
+			Allowed: true,
+		}
+	}
+
+	client := svmate.client
+
+	if client.chekWorkspace(resourceNamespace) {
+		patches = addEphemeralStorage(deploy.Spec.Template.Spec.Containers)
+	}
+
 	//获取所在子网的前15个ip地址，生成annotation键值对
 	subnet := getSubnet(resourceNamespace)
 	ips := createAnnotation(subnet)
 
-	/*
-		ips := make(map[string]string)
-		ips["nci.yunshan.net/ips"] = "10.64.88.1,10.64.88.2,10.64.88.3,10.64.88.4,10.64.88.5,10.64.88.6,10.64.88.7,10.64.88.8,10.64.88.9,10.64.88.10,10.64.88.11,10.64.88.12,10.64.88.13,10.64.88.14,10.64.88.15"
-	*/
+	//ips := make(map[string]string)
+	//ips["nci.yunshan.net/ips"] = "10.64.88.1,10.64.88.2,10.64.88.3,10.64.88.4,10.64.88.5,10.64.88.6,10.64.88.7,10.64.88.8,10.64.88.9,10.64.88.10,10.64.88.11,10.64.88.12,10.64.88.13,10.64.88.14,10.64.88.15"
+
 	//通过标签判断是否为网关deployment
-	if _, ok := objectMeta.Labels["app.kubernetes.io/component"]; !ok {
-		glog.Infof("Skipping validation for %s due to policy check", resourceName)
-		return &v1.AdmissionResponse{
-			Allowed: true,
+	if !checkKsIngress(objectMeta, resourceName) {
+		patchBytes, err := json.Marshal(patches)
+		if err != nil {
+			return &v1.AdmissionResponse{
+				Result: &metav1.Status{
+					Message: err.Error(),
+				},
+			}
 		}
-	}
-
-	if _, ok := objectMeta.Labels["app.kubernetes.io/name"]; !ok {
-		glog.Infof("Skipping validation for %s due to policy check", resourceName)
+		glog.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
 		return &v1.AdmissionResponse{
 			Allowed: true,
-		}
-	}
-
-	if objectMeta.Labels["app.kubernetes.io/component"] != "controller" || objectMeta.Labels["app.kubernetes.io/name"] != "ingress-nginx" {
-		glog.Infof("Skipping validation for %s due to policy check", resourceName)
-		return &v1.AdmissionResponse{
-			Allowed: true,
+			Patch:   patchBytes,
+			PatchType: func() *v1.PatchType {
+				pt := v1.PatchTypeJSONPatch
+				return &pt
+			}(),
 		}
 	}
 
 	if !checkAnnotation(specMeta, ips) {
-		glog.Infof("Skipping validation for %s due to policy check", resourceName)
+		glog.Infof("%s已经注入了固定ip地址,", resourceName)
+
+		patchBytes, err := json.Marshal(patches)
+		if err != nil {
+			return &v1.AdmissionResponse{
+				Result: &metav1.Status{
+					Message: err.Error(),
+				},
+			}
+		}
+		glog.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
 		return &v1.AdmissionResponse{
 			Allowed: true,
+			Patch:   patchBytes,
+			PatchType: func() *v1.PatchType {
+				pt := v1.PatchTypeJSONPatch
+				return &pt
+			}(),
 		}
 	}
 
-	patchBytes, err := createPatch(specMeta.Annotations, ips)
+	patch := createPatch(specMeta.Annotations, ips)
+
+	for i := range patch {
+		patches = append(patches, patch[i])
+	}
+
+	patchBytes, err := json.Marshal(patches)
 	if err != nil {
 		return &v1.AdmissionResponse{
 			Result: &metav1.Status{
@@ -135,7 +253,9 @@ func mutateNamespce(svmate serverMate, namespace *corev1.Namespace) *v1.Admissio
 		}
 	}
 
-	patchBytes, err := createPatch(objectMeta.Labels, addLabels)
+	pathes := createPatch(objectMeta.Labels, addLabels)
+
+	patchBytes, err := json.Marshal(pathes)
 	if err != nil {
 		return &v1.AdmissionResponse{
 			Result: &metav1.Status{
@@ -186,10 +306,29 @@ func admissionRequired(admissionWebhookAnnotationMutateKey string, metadata *met
 	return required
 }
 
-func checkLabel(metadata *metav1.ObjectMeta, targetLabel string) bool {
+func checkKsIngress(metaData *metav1.ObjectMeta, resourceName string) bool {
+	if _, ok := metaData.Labels["app.kubernetes.io/component"]; !ok {
+		glog.Infof("%s不是平台网关应用，跳过注入固定ip地址,", resourceName)
+		return false
+	}
+
+	if _, ok := metaData.Labels["app.kubernetes.io/name"]; !ok {
+		glog.Infof("%s不是平台网关应用，跳过注入固定ip地址,", resourceName)
+		return false
+	}
+
+	if metaData.Labels["app.kubernetes.io/component"] != "controller" || metaData.Labels["app.kubernetes.io/name"] != "ingress-nginx" {
+		glog.Infof("%s不是平台网关应用，跳过注入固定ip地址,", resourceName)
+		return false
+	}
+
+	return true
+}
+
+func checkLabel(metaData *metav1.ObjectMeta, targetLabel string) bool {
 
 	required := true
-	labels := metadata.GetLabels()
+	labels := metaData.GetLabels()
 	if labels == nil {
 		labels = map[string]string{}
 	}
@@ -202,7 +341,7 @@ func checkLabel(metadata *metav1.ObjectMeta, targetLabel string) bool {
 
 	}
 
-	glog.Infof("The label %v exists in this namespace: %v", targetLabel, metadata.Name)
+	glog.Infof("The label %v exists in this namespace: %v", targetLabel, metaData.Name)
 	return required
 }
 
@@ -293,7 +432,7 @@ func updateAnnotations(target map[string]string, added map[string]string) (patch
 	return patch
 }
 
-func createPatch(availableKeys map[string]string, values map[string]string) ([]byte, error) {
+func createPatch(availableKeys map[string]string, values map[string]string) []patchOperation {
 	var patch []patchOperation
 
 	if _, ok := values["nci.yunshan.net/ips"]; ok {
@@ -301,7 +440,7 @@ func createPatch(availableKeys map[string]string, values map[string]string) ([]b
 	} else {
 		patch = append(patch, updateLabels(availableKeys, values)...)
 	}
-	return json.Marshal(patch)
+	return patch
 }
 
 // main mutation process
@@ -309,22 +448,21 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 	req := ar.Request
 	var svmate serverMate
 	svmate.vpcprefix, svmate.abnormalws, svmate.op = whsvr.vpcprefix, whsvr.abnormalws, req.Operation
+
+	// 实例化 DynamicClient
+	config, err := clientcmd.BuildConfigFromFlags("", "/root/.kube/config")
+	if err != nil {
+		panic(err.Error())
+	}
+
+	svmate.client.dynamicClient, err = dynamic.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
+
 	glog.Infof("AdmissionReview for Kind=%v, Name=%v UID=%v patchOperation=%v UserInfo=%v",
 		req.Kind, req.Name, req.UID, req.Operation, req.UserInfo)
 	switch req.Kind.Kind {
-	case "Pod":
-		var pod corev1.Pod
-
-		if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
-			glog.Errorf("Could not unmarshal raw object: %v", err)
-			return &v1.AdmissionResponse{
-				Result: &metav1.Status{
-					Message: err.Error(),
-				},
-			}
-		}
-		glog.Infof("start mutatePod")
-		return mutatePod(&pod)
 	case "Namespace":
 		var namespace corev1.Namespace
 
@@ -349,7 +487,31 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 			}
 		}
 		glog.Infof("start mutateDeploy")
-		return mutateDeploy(&deployment)
+		return mutateDeploy(svmate, &deployment)
+	case "DaemonSet":
+		var daemonSet appsv1.DaemonSet
+		if err := json.Unmarshal(req.Object.Raw, &daemonSet); err != nil {
+			glog.Errorf("Could not unmarshal raw object: %v", err)
+			return &v1.AdmissionResponse{
+				Result: &metav1.Status{
+					Message: err.Error(),
+				},
+			}
+		}
+		glog.Infof("start mutateDs")
+		return mutateDs(svmate, &daemonSet)
+	case "StatefulSet":
+		var statefulSet appsv1.StatefulSet
+		if err := json.Unmarshal(req.Object.Raw, &statefulSet); err != nil {
+			glog.Errorf("Could not unmarshal raw object: %v", err)
+			return &v1.AdmissionResponse{
+				Result: &metav1.Status{
+					Message: err.Error(),
+				},
+			}
+		}
+		glog.Infof("start mutateDSts")
+		return mutateSts(svmate, &statefulSet)
 	case "Workspace":
 		glog.Infof("start vpcHandler")
 		return vpcHandler(req.Name, svmate)
