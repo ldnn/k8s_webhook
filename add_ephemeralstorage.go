@@ -40,6 +40,7 @@ func addEphemeralStorage(containers []corev1.Container) []patchOperation {
 	return patches
 }
 
+// 判断是不是平台组件的模块
 func (c *Client) chekWorkspace(namespace string) bool {
 
 	// 设置要请求的 GVR
@@ -71,5 +72,5 @@ func (c *Client) chekWorkspace(namespace string) bool {
 		return true
 	}
 
-	return true
+	return false
 }

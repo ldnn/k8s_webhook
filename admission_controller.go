@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,9 +15,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
+	"kubesphere.io/api/tenant/v1alpha1"
 )
 
 func mutateSts(svmate serverMate, sts *appsv1.StatefulSet) *v1.AdmissionResponse {
@@ -125,16 +128,9 @@ func mutateDeploy(svmate serverMate, deploy *appsv1.Deployment) *v1.AdmissionRes
 
 	client := svmate.client
 
-	if client.chekWorkspace(resourceNamespace) {
+	if !client.chekWorkspace(resourceNamespace) {
 		patches = addEphemeralStorage(deploy.Spec.Template.Spec.Containers)
 	}
-
-	//获取所在子网的前15个ip地址，生成annotation键值对
-	subnet := getSubnet(resourceNamespace)
-	ips := createAnnotation(subnet)
-
-	//ips := make(map[string]string)
-	//ips["nci.yunshan.net/ips"] = "10.64.88.1,10.64.88.2,10.64.88.3,10.64.88.4,10.64.88.5,10.64.88.6,10.64.88.7,10.64.88.8,10.64.88.9,10.64.88.10,10.64.88.11,10.64.88.12,10.64.88.13,10.64.88.14,10.64.88.15"
 
 	//通过标签判断是否为网关deployment
 	if !checkKsIngress(objectMeta, resourceName) {
@@ -156,6 +152,22 @@ func mutateDeploy(svmate serverMate, deploy *appsv1.Deployment) *v1.AdmissionRes
 			}(),
 		}
 	}
+
+	//获取所在子网的前15个ip地址，生成annotation键值对
+	subnet := client.getSubnet(resourceNamespace)
+	if subnet == "ERROR" {
+		msg := fmt.Sprintf("namespace: \"%v\" 没有关联到子网，请排查sdn网络", resourceNamespace)
+		glog.Errorf(msg)
+		return &v1.AdmissionResponse{
+			Result: &metav1.Status{
+				Message: msg,
+			},
+		}
+	}
+	ips := createAnnotation(subnet)
+
+	//ips := make(map[string]string)
+	//ips["nci.yunshan.net/ips"] = "10.64.88.1,10.64.88.2,10.64.88.3,10.64.88.4,10.64.88.5,10.64.88.6,10.64.88.7,10.64.88.8,10.64.88.9,10.64.88.10,10.64.88.11,10.64.88.12,10.64.88.13,10.64.88.14,10.64.88.15"
 
 	if !checkAnnotation(specMeta, ips) {
 		glog.Infof("%s已经注入了固定ip地址,", resourceName)
@@ -213,6 +225,7 @@ func mutateNamespce(svmate serverMate, namespace *corev1.Namespace) *v1.Admissio
 	)
 
 	resourceName, objectMeta = namespace.Name, &namespace.ObjectMeta
+	client := svmate.client
 
 	//判断是否进行修改
 	if !admissionRequired(admissionWebhookAnnotationMutateKey, objectMeta) {
@@ -239,6 +252,16 @@ func mutateNamespce(svmate serverMate, namespace *corev1.Namespace) *v1.Admissio
 		workspace = objectMeta.Labels[admissionWebhookWorkspaceKey]
 	}
 
+	//判断workspace是否存在
+	if !client.workspaceExist(workspace) {
+		msg := fmt.Sprintf("业务空间: \"%v\" 不存在", workspace)
+		glog.Errorf(msg)
+		return &v1.AdmissionResponse{
+			Result: &metav1.Status{
+				Message: msg,
+			},
+		}
+	}
 	//生成vpc名
 	if svmate.vpcprefix == "default" {
 		addLabels[admissionWebhookLabelsKey] = "default"
@@ -450,7 +473,7 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 	svmate.vpcprefix, svmate.abnormalws, svmate.op = whsvr.vpcprefix, whsvr.abnormalws, req.Operation
 
 	// 实例化 DynamicClient
-	config, err := clientcmd.BuildConfigFromFlags("", "/root/.kube/config")
+	config, err := clientcmd.BuildConfigFromFlags("", "")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -611,4 +634,33 @@ func (whsvr *WebhookServer) serve(w http.ResponseWriter, r *http.Request) {
 		glog.Errorf("Can't write response: %v", err)
 		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)
 	}
+}
+
+func (c *Client) workspaceExist(workspaceName string) bool {
+
+	// 设置要请求的 GVR
+	gvr := schema.GroupVersionResource{
+		Group:    "tenant.kubesphere.io",
+		Version:  "v1alpha1",
+		Resource: "workspaces",
+	}
+
+	// 发送请求，并得到返回结果
+	unStructData, err := c.dynamicClient.Resource(gvr).Get(context.TODO(), workspaceName, metav1.GetOptions{})
+	if err != nil {
+		glog.Error(err.Error())
+		return false
+	}
+
+	var obj v1alpha1.Workspace
+
+	// 使用 runtime.DefaultUnstructuredConverter 转换 item 为对象
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(unStructData.UnstructuredContent(), &obj)
+	if err != nil {
+		glog.Error(err.Error())
+		//return false
+
+	}
+
+	return true
 }

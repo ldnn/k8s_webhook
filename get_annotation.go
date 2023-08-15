@@ -2,32 +2,18 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
-func getSubnet(namespace string) string {
+func (c *Client) getSubnet(namespace string) string {
 
 	var cidr string
-
-	// 加载配置文件，生成 config 对象
-	config, err := clientcmd.BuildConfigFromFlags("", "")
-	if err != nil {
-		panic(err.Error())
-	}
-
-	// 实例化 DynamicClient
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
-	}
 
 	// 设置要请求的 GVR
 	gvr := schema.GroupVersionResource{
@@ -37,7 +23,7 @@ func getSubnet(namespace string) string {
 	}
 
 	// 发送请求，并得到返回结果
-	unStructData, err := dynamicClient.Resource(gvr).Namespace(namespace).List(context.TODO(), metav1.ListOptions{})
+	unStructData, err := c.dynamicClient.Resource(gvr).Namespace(namespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		panic(err.Error())
 	}
@@ -47,13 +33,18 @@ func getSubnet(namespace string) string {
 	// 使用 runtime.DefaultUnstructuredConverter 转换 item 为对象
 	err = runtime.DefaultUnstructuredConverter.FromUnstructured(unStructData.UnstructuredContent(), &obj)
 	if err != nil {
-		fmt.Printf("Failed to convert item: %v\n", err)
+		glog.Infof("Failed to convert item: %v\n", err)
 		return "ERROR"
 	}
 
 	// 输出资源信息
 	for _, item := range obj.Items {
 		cidr = item.Spec.CIDR
+	}
+
+	if cidr == "" {
+		glog.Infof("没有找到子网资源，请检查网络插件")
+		return "ERROR"
 	}
 
 	return cidr
