@@ -22,93 +22,6 @@ import (
 	"kubesphere.io/api/tenant/v1alpha1"
 )
 
-func mutateSts(svmate serverMate, sts *appsv1.StatefulSet) *v1.AdmissionResponse {
-	var (
-		objectMeta                      *metav1.ObjectMeta
-		resourceName, resourceNamespace string
-	)
-	resourceName, resourceNamespace, objectMeta = sts.Name, sts.Namespace, &sts.ObjectMeta
-
-	var patches []patchOperation
-
-	//判断是否需要修改
-	if !admissionRequired(admissionWebhookAnnotationMutateKey, objectMeta) {
-		glog.Infof("Skipping validation for %s due to policy check", resourceName)
-		return &v1.AdmissionResponse{
-			Allowed: true,
-		}
-	}
-
-	client := svmate.client
-
-	if client.chekWorkspace(resourceNamespace) {
-		patches = addEphemeralStorage(sts.Spec.Template.Spec.Containers)
-	}
-
-	patchBytes, err := json.Marshal(patches)
-	if err != nil {
-		return &v1.AdmissionResponse{
-			Result: &metav1.Status{
-				Message: err.Error(),
-			},
-		}
-	}
-
-	glog.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
-	return &v1.AdmissionResponse{
-		Allowed: true,
-		Patch:   patchBytes,
-		PatchType: func() *v1.PatchType {
-			pt := v1.PatchTypeJSONPatch
-			return &pt
-		}(),
-	}
-
-}
-
-func mutateDs(svmate serverMate, ds *appsv1.DaemonSet) *v1.AdmissionResponse {
-	var (
-		objectMeta                      *metav1.ObjectMeta
-		resourceName, resourceNamespace string
-	)
-	resourceName, resourceNamespace, objectMeta = ds.Name, ds.Namespace, &ds.ObjectMeta
-
-	var patches []patchOperation
-
-	//判断是否需要修改
-	if !admissionRequired(admissionWebhookAnnotationMutateKey, objectMeta) {
-		glog.Infof("Skipping validation for %s due to policy check", resourceName)
-		return &v1.AdmissionResponse{
-			Allowed: true,
-		}
-	}
-
-	client := svmate.client
-
-	if client.chekWorkspace(resourceNamespace) {
-		patches = addEphemeralStorage(ds.Spec.Template.Spec.Containers)
-	}
-
-	patchBytes, err := json.Marshal(patches)
-	if err != nil {
-		return &v1.AdmissionResponse{
-			Result: &metav1.Status{
-				Message: err.Error(),
-			},
-		}
-	}
-
-	glog.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
-	return &v1.AdmissionResponse{
-		Allowed: true,
-		Patch:   patchBytes,
-		PatchType: func() *v1.PatchType {
-			pt := v1.PatchTypeJSONPatch
-			return &pt
-		}(),
-	}
-}
-
 func mutateDeploy(svmate serverMate, deploy *appsv1.Deployment) *v1.AdmissionResponse {
 	var (
 		objectMeta, specMeta            *metav1.ObjectMeta
@@ -127,10 +40,6 @@ func mutateDeploy(svmate serverMate, deploy *appsv1.Deployment) *v1.AdmissionRes
 	}
 
 	client := svmate.client
-
-	if !client.chekWorkspace(resourceNamespace) {
-		patches = addEphemeralStorage(deploy.Spec.Template.Spec.Containers)
-	}
 
 	//通过标签判断是否为网关deployment
 	if !checkKsIngress(objectMeta, resourceName) {
@@ -390,6 +299,8 @@ func generateVpcName(workspace string, svmate serverMate) string {
 		switch workspace {
 		case "system-workspace":
 			vpcName = "default"
+		case "firefly":
+			vpcName = "default"
 		default:
 			labelValue := []string{svmate.vpcprefix, workspace}
 			vpcName = strings.Join(labelValue, "-")
@@ -511,30 +422,6 @@ func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse
 		}
 		glog.Infof("start mutateDeploy")
 		return mutateDeploy(svmate, &deployment)
-	case "DaemonSet":
-		var daemonSet appsv1.DaemonSet
-		if err := json.Unmarshal(req.Object.Raw, &daemonSet); err != nil {
-			glog.Errorf("Could not unmarshal raw object: %v", err)
-			return &v1.AdmissionResponse{
-				Result: &metav1.Status{
-					Message: err.Error(),
-				},
-			}
-		}
-		glog.Infof("start mutateDs")
-		return mutateDs(svmate, &daemonSet)
-	case "StatefulSet":
-		var statefulSet appsv1.StatefulSet
-		if err := json.Unmarshal(req.Object.Raw, &statefulSet); err != nil {
-			glog.Errorf("Could not unmarshal raw object: %v", err)
-			return &v1.AdmissionResponse{
-				Result: &metav1.Status{
-					Message: err.Error(),
-				},
-			}
-		}
-		glog.Infof("start mutateDSts")
-		return mutateSts(svmate, &statefulSet)
 	case "Workspace":
 		glog.Infof("start vpcHandler")
 		return vpcHandler(req.Name, svmate)

@@ -73,16 +73,17 @@ type Subnet struct {
 }
 
 type SubnetSpec struct {
-	CIDR     string `json:"cidr"`
-	Gateway  string `json:"gateway"`
-	Protocol string `json:"protocol"`
+	AllocationStrategy string `json:"allocationStrategy"`
+	CIDR               string `json:"cidr"`
+	ExcludeIPs         string `json:"excludeIPs"`
+	Gateway            string `json:"gateway"`
+	IncludeIPs         string `json:"includeIPs"`
 }
 
 type SubnetStatus struct {
-	AvailableIPs    string `json:"availableIps"`
-	NumAvailableIPs int    `json:"numAvailableIps"`
-	NumUsingIPs     int    `json:"numUsingIps"`
-	Valid           bool   `json:"valid"`
+	AllocatedCIDR string `json:"allocatedCIDR"`
+	AvailableIPs  string `json:"availableIps"`
+	Capacity      string `json:"capacity"`
 }
 
 type Vpc struct {
