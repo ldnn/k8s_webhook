@@ -34,6 +34,7 @@ type WebhookServer struct {
 	server     *http.Server
 	vpcprefix  string
 	abnormalws sliceFlag
+	cluster    string
 }
 
 // Webhook Server parameters
@@ -44,6 +45,7 @@ type WhSvrParameters struct {
 	sidecarCfgFile string    // path to sidecar injector configuration file
 	vpcprefix      string    // vpc label key prefix
 	workspaces     sliceFlag // abnormal workspaces
+	cluster        string    //cluster name
 }
 
 type patchOperation struct {
@@ -54,6 +56,7 @@ type patchOperation struct {
 
 type serverMate struct {
 	vpcprefix  string
+	cluster    string
 	abnormalws sliceFlag
 	op         v1.Operation
 	client     Client

@@ -18,6 +18,10 @@ func vpcHandler(wsName string, svmate serverMate) *v1.AdmissionResponse {
 
 	client := svmate.client
 	var vpcName string
+	label := make(map[string]string)
+
+	label["kubesphere.io/cluster"] = svmate.cluster
+	label["kubesphere.io/workspace"] = wsName
 
 	if svmate.vpcprefix == "default" {
 		return &v1.AdmissionResponse{
@@ -36,8 +40,8 @@ func vpcHandler(wsName string, svmate serverMate) *v1.AdmissionResponse {
 			}
 		}
 	case "CREATE":
-		//workspace删除时同步删除vpc
-		if client.chekVpc(vpcName) || client.createVpc(vpcName) {
+		//workspace创建时同步创建vpc
+		if client.chekVpc(vpcName) || client.createVpc(vpcName, label) {
 			return &v1.AdmissionResponse{
 				Allowed: true,
 			}
@@ -87,7 +91,7 @@ func (c *Client) chekVpc(vpcName string) bool {
 	return true
 }
 
-func (c *Client) createVpc(vpcName string) bool {
+func (c *Client) createVpc(vpcName string, label map[string]string) bool {
 
 	// 设置要请求的 GVR
 	gvr := schema.GroupVersionResource{
@@ -101,7 +105,8 @@ func (c *Client) createVpc(vpcName string) bool {
 			"apiVersion": "nci.yunshan.net/v1",
 			"kind":       "VPC",
 			"metadata": map[string]interface{}{
-				"name": vpcName,
+				"name":   vpcName,
+				"labels": label,
 			},
 		},
 	}

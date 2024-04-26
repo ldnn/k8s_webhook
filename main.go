@@ -21,11 +21,16 @@ func main() {
 	flag.StringVar(&parameters.certFile, "tlsCertFile", "/etc/webhook/certs/cert.crt", "File containing the x509 Certificate for HTTPS.")
 	flag.StringVar(&parameters.keyFile, "tlsKeyFile", "/etc/webhook/certs/key.key", "File containing the x509 private key to --tlsCertFile.")
 	flag.StringVar(&parameters.vpcprefix, "vpcprefix", "default", "vpcprefix")
+	flag.StringVar(&parameters.cluster, "cluster", "poc", "cluster")
 	flag.Var(&parameters.workspaces, "ws", "abnormal workspaces,for example:shanlv,tuangou")
 	flag.Parse()
 
 	if parameters.vpcprefix == " " {
 		glog.Errorf("'vpcprefix'选项不支持空串!!!")
+	}
+
+	if parameters.cluster == " " {
+		glog.Errorf("'cluster'选项不支持空串!!!")
 	}
 
 	pair, err := tls.LoadX509KeyPair(parameters.certFile, parameters.keyFile)
@@ -40,6 +45,7 @@ func main() {
 		},
 		vpcprefix:  parameters.vpcprefix,
 		abnormalws: parameters.workspaces,
+		cluster:    parameters.cluster,
 	}
 
 	// define http server and server handler

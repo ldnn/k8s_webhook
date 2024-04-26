@@ -381,7 +381,7 @@ func createPatch(availableKeys map[string]string, values map[string]string) []pa
 func (whsvr *WebhookServer) mutate(ar *v1.AdmissionReview) *v1.AdmissionResponse {
 	req := ar.Request
 	var svmate serverMate
-	svmate.vpcprefix, svmate.abnormalws, svmate.op = whsvr.vpcprefix, whsvr.abnormalws, req.Operation
+	svmate.vpcprefix, svmate.cluster, svmate.abnormalws, svmate.op = whsvr.vpcprefix, whsvr.cluster, whsvr.abnormalws, req.Operation
 
 	// 实例化 DynamicClient
 	config, err := clientcmd.BuildConfigFromFlags("", "")
